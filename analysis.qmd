@@ -1,0 +1,12 @@
+---
+title: "Crypto Markets"
+author: "Genesis"
+execute:
+  echo: false
+---
+
+```{r}
+#| message: false
+library(tidyverse)
+library(arrow)
+```
