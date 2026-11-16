@@ -10,3 +10,128 @@ execute:
 library(tidyverse)
 library(arrow)
 ```
+
+```{r}
+open_dataset("data/daily_prices.parquet")
+```
+
+```{r}
+set.seed(9) 
+open_dataset("data/daily_prices.parquet") |>
+  collect() |>
+  slice_sample(n = 10) 
+```
+
+```{r}
+open_dataset("data/daily_prices.parquet") |>
+  filter(date_raw >= "2025-01-01") |>
+  group_by(coin_id) |>
+  summarise(mean_mcap = mean(market_cap_usd, na.rm = TRUE), days = n()) |>
+  arrange(desc(mean_mcap)) |>
+  collect()
+```
+
+```{r}
+prices <- open_dataset("data/daily_prices.parquet") |>
+  collect()
+metadata <- open_dataset("data/coin_metadata.parquet") |>
+  collect()
+categories <- open_dataset("data/categories.parquet") |>
+  collect()
+categories
+```
+```{r}
+metadata |>
+  select(coin_id, coin_name, launch_date)
+```
+```{r}
+metadata |>
+  mutate(launch = as_date(parse_date_time(launch_date, orders = c("mdy", "ymd")))) |>
+  arrange(launch) |>
+  select(coin_id, launch_date, launch)
+```
+
+```{r} 
+prices |>
+  filter(coin_id == "btc") |>
+  mutate(date = ymd(date_raw)) |>
+  ggplot(aes(x = date, y = price_usd)) +
+  geom_line() +
+  labs(x = NULL, y = "Price (USD)", title = "Bitcoin daily price") +
+  theme_minimal()
+```
+
+```{r}
+prices |>
+  left_join(metadata, by = "coin_id") |>
+  left_join(select(categories, -description), by = "category_id")
+```
+
+```{r}
+#| cache: true
+prices <- open_dataset("data/daily_prices.parquet") |>
+  collect()
+metadata <- open_dataset("data/coin_metadata.parquet") |>
+  collect()
+categories <- open_dataset("data/categories.parquet") |>
+  collect()
+
+crypto <- prices |>
+  left_join(metadata, by = "coin_id") |>
+  left_join(select(categories, -description), by = "category_id") |>
+  mutate(date = ymd(date_raw))
+
+```
+
+```{r}
+crypto |>
+  mutate(
+    date = ymd(date_raw),
+    category_name = fct_reorder(category_name, market_cap_usd, .fun = sum, .desc = TRUE)
+  ) |>
+  group_by(date, category_name) |>
+  summarize(cat_mcap = sum(market_cap_usd, na.rm = TRUE), .groups = "drop") |>
+  ggplot(aes(x = date, y = cat_mcap, fill = category_name)) +
+  geom_area(position = "fill") +
+  geom_vline(
+    xintercept = as.Date(c("2022-05-09", "2022-11-08")),
+    linetype = "dashed",
+    color = "white",
+    linewidth = 0.6
+  ) +
+  annotate(
+    "label",
+    x = as.Date("2022-05-09"),
+    y = 0.88,
+    label = "Luna/UST crash\n(May 2022)",
+    size = 3,
+    hjust = 1.05,
+    fill = "white",
+    alpha = 0.85
+  ) +
+  annotate(
+    "label",
+    x = as.Date("2022-11-08"),
+    y = 0.72,
+    label = "FTX collapse\n(Nov 2022)",
+    size = 3,
+    hjust = -0.05,
+    fill = "white",
+    alpha = 0.85
+  ) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  scale_fill_viridis_d(option = "viridis", direction = -1) +
+  labs(
+    title = "Crypto Market Share by Sector",
+    subtitle = "Bitcoin dominance gave way to smart contract platforms and stablecoins, with sharp shifts around major market shocks",
+    x = NULL,
+    y = "Share of Total Market Cap",
+    fill = "Category",
+    caption = "Source: CoinGecko / PPBDS Crypto Dataset (22 major coins)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title.position = "plot",
+    legend.position = "right"
+  )
+```
